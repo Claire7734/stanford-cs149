@@ -8,6 +8,8 @@ typedef struct {
     float y0, y1;
     unsigned int width;
     unsigned int height;
+    unsigned int startRow;
+    unsigned int totalRows;
     int maxIterations;
     int* output;
     int threadId;
@@ -22,7 +24,7 @@ extern void mandelbrotSerial(
     int maxIterations,
     int output[]);
 
-
+#define SPLIT_TIME 25
 //
 // workerThreadStart --
 //
@@ -35,7 +37,23 @@ void workerThreadStart(WorkerArgs * const args) {
     // program that uses two threads, thread 0 could compute the top
     // half of the image and thread 1 could compute the bottom half.
 
-    printf("Hello world from thread %d\n", args->threadId);
+    double minThread = 1e30;
+    double startTime = CycleTimer::currentSeconds();
+    int totalRowsThreads = args->totalRows * args->numThreads;
+    for (int k=0; k<SPLIT_TIME; k++){
+        mandelbrotSerial(
+            args->x0, args->y0, args->x1, args->y1,
+            args->width, args->height,
+            args->startRow + totalRowsThreads*k, args->totalRows,
+            args->maxIterations,
+            args->output);
+    }
+    double endTime = CycleTimer::currentSeconds();
+    minThread = std::min(minThread, endTime - startTime);
+    printf("Computing from thread %d, startRow %d, totalRows %d, [%.3f] ms\n", 
+        args->threadId, 
+        args->startRow, args->totalRows,
+        minThread * 1000);
 }
 
 //
@@ -61,8 +79,9 @@ void mandelbrotThread(
     std::thread workers[MAX_THREADS];
     WorkerArgs args[MAX_THREADS];
 
+    int segHeight = height / numThreads / SPLIT_TIME;
     for (int i=0; i<numThreads; i++) {
-      
+    
         // TODO FOR CS149 STUDENTS: You may or may not wish to modify
         // the per-thread arguments here.  The code below copies the
         // same arguments for each thread
@@ -72,10 +91,12 @@ void mandelbrotThread(
         args[i].y1 = y1;
         args[i].width = width;
         args[i].height = height;
+        args[i].startRow = i*segHeight;
+        args[i].totalRows = segHeight;
         args[i].maxIterations = maxIterations;
         args[i].numThreads = numThreads;
         args[i].output = output;
-      
+    
         args[i].threadId = i;
     }
 
@@ -92,5 +113,6 @@ void mandelbrotThread(
     for (int i=1; i<numThreads; i++) {
         workers[i].join();
     }
+
 }
 
