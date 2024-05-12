@@ -249,7 +249,92 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   //
-  
+  //char dynamicLog[100];
+  __cs149_vec_float x;
+  __cs149_vec_int y;
+  __cs149_vec_float result;
+  __cs149_vec_int exp;
+  __cs149_vec_float one = _cs149_vset_float(1.f);
+  __cs149_vec_float max = _cs149_vset_float(9.999999f);
+  __cs149_mask maskAll, maskDone, maskRest, maskTmp;
+  int cbits, count, i;
+  for (i=0; i<=N-VECTOR_WIDTH; i+=VECTOR_WIDTH) {
+    maskAll = _cs149_init_ones();
+    maskDone =  _cs149_init_ones(0);
+
+    _cs149_vload_float(x, values+i, maskAll);
+    _cs149_vload_int(y, exponents+i, maskAll);
+
+    //sprintf(dynamicLog, "x: % f, y: %d", x, y);
+    //addUserLog(dynamicLog);
+
+    result = _cs149_vset_float(1.f); // exp == 0
+
+    count = 0;
+    exp = _cs149_vset_int(count);
+    _cs149_veq_int(maskDone, y, exp, maskAll);
+
+    while ((cbits = _cs149_cntbits(maskDone)) < VECTOR_WIDTH){
+      count++;
+      //sprintf(dynamicLog, "count: %d", count);
+      //addUserLog(dynamicLog);
+      maskRest = _cs149_mask_not(maskDone);
+      _cs149_vmult_float(result, result, x, maskRest);
+      // max
+      maskTmp = _cs149_init_ones(0);
+      _cs149_vgt_float(maskTmp, result, max, maskRest);
+      _cs149_vmove_float(result, max, maskTmp);
+      maskDone = _cs149_mask_or(maskDone, maskTmp);
+      // y == count
+      maskRest = _cs149_mask_not(maskDone);
+      exp = _cs149_vset_int(count);
+      maskTmp = _cs149_init_ones(0);
+      _cs149_veq_int(maskTmp, y, exp, maskRest);
+      maskDone = _cs149_mask_or(maskDone, maskTmp);
+    }
+
+    _cs149_vstore_float(output+i, result, maskAll);
+  }
+  if (i != N){
+    int rest = N - i;
+    maskAll = _cs149_init_ones();
+    maskDone =  _cs149_init_ones(rest);
+
+    _cs149_vload_float(x, values+i, maskAll);
+    _cs149_vload_int(y, exponents+i, maskAll);
+
+    //sprintf(dynamicLog, "x: % f, y: %d", x, y);
+    //addUserLog(dynamicLog);
+
+    result = _cs149_vset_float(1.f); // exp == 0
+
+    count = 0;
+    exp = _cs149_vset_int(count);
+    _cs149_veq_int(maskDone, y, exp, maskAll);
+
+    while ((cbits = _cs149_cntbits(maskDone)) < VECTOR_WIDTH){
+      count++;
+      //sprintf(dynamicLog, "count: %d", count);
+      //addUserLog(dynamicLog);
+      maskRest = _cs149_mask_not(maskDone);
+      _cs149_vmult_float(result, result, x, maskRest);
+      // max
+      maskTmp = _cs149_init_ones(0);
+      _cs149_vgt_float(maskTmp, result, max, maskRest);
+      _cs149_vmove_float(result, max, maskTmp);
+      maskDone = _cs149_mask_or(maskDone, maskTmp);
+      // y == count
+      maskRest = _cs149_mask_not(maskDone);
+      exp = _cs149_vset_int(count);
+      maskTmp = _cs149_init_ones(0);
+      _cs149_veq_int(maskTmp, y, exp, maskRest);
+      maskDone = _cs149_mask_or(maskDone, maskTmp);
+    }
+
+    for (int j=0; j<rest; j++) {
+      (output+i)[j] = result.value[j];
+  }
+  }
 }
 
 // returns the sum of all elements in values
