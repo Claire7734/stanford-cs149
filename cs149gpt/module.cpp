@@ -27,12 +27,12 @@ inline void twoDimWrite(std::vector<float> &tensor, int &x, int &y, const int &s
 // Step #2: Implement Read/Write Accessors for a 4D Tensor
 inline float fourDimRead(std::vector<float> &tensor, int &x, int &y, int &z, int &b, 
         const int &sizeX, const int &sizeY, const int &sizeZ) {
-    return 0.0;
+    return tensor[x*(sizeX)*(sizeY)*(sizeZ) + y*(sizeY)*(sizeZ) + z*(sizeZ) + b];
 }
 
 inline void fourDimWrite(std::vector<float> &tensor, int &x, int &y, int &z, int &b, 
         const int &sizeX, const int &sizeY, const int &sizeZ, float &val) {
-    return; 
+    tensor[x*(sizeX)*(sizeY)*(sizeZ) + y*(sizeY)*(sizeZ) + z*(sizeZ) + b] = val;
 }
 
 // DO NOT EDIT THIS FUNCTION //
@@ -123,6 +123,55 @@ torch::Tensor myNaiveAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     */
     
     // -------- YOUR CODE HERE  -------- //
+
+    for (int b = 0; b < B; b++) {
+
+        //loop over Heads
+        for (int h = 0; h < H; h++) {
+
+            //loop over Sequence Length
+            for (int i = 0; i < N; i++) {
+                for (int k = 0; k < N; k++) {
+                    float val = 0.0;
+                    //loop over Embedding Dimensionality
+                    for (int j = 0; j < d; j++) {
+                        float val_q = fourDimRead(Q, b, h, i, j, H, N, d);
+                        float val_k = fourDimRead(K, b, h, k, j, H, N, d);
+                        val += val_q*val_k;
+                    }
+                    twoDimWrite(QK_t, i, k, N, val);
+                }
+            }
+
+            for (int i = 0; i < N; i++) {
+                float sum = 0.0;
+                for (int j = 0; j < N; j++) {
+                    float val = exp(twoDimRead(QK_t, i, j, N));
+                    sum += val;
+                    twoDimWrite(QK_t, i, j, N, val);
+                }
+                for (int j = 0; j < N; j++) {
+                    float val = twoDimRead(QK_t, i, j, N) / sum;
+                    twoDimWrite(QK_t, i, j, N, val);
+                }
+            }
+
+            //loop over Sequence Length
+            for (int i = 0; i < N; i++) {
+                //loop over Embedding Dimensionality
+                for (int j = 0; j < d; j++) {
+                    float val = 0.0;
+                    //loop over Embedding Dimensionality
+                    for (int k = 0; k < N; k++) {
+                    float val_qk_t = twoDimRead(QK_t, i, k, N);
+                    float val_v = fourDimRead(V, b, h, k, j, H, N, d);
+                    val += val_qk_t*val_v;
+                    }
+                    fourDimWrite(O, b, h, i, j, H, N, d, val);
+                }
+            }
+        }
+    }
     
     // DO NOT EDIT THIS RETURN STATEMENT //
     // It formats your C++ Vector O back into a Tensor of Shape (B, H, N, d) and returns it //
