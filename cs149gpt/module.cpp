@@ -301,15 +301,45 @@ torch::Tensor myFusedAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
         for (int h = 0; h < H; h++){
             for (int i = 0; i < N ; i++){
 
-		// YRow is moved inside so each OpenMP thread gets a local copy.
+        // YRow is moved inside so each OpenMP thread gets a local copy.
                 at::Tensor ORowTensor = temp.index({torch::indexing::Slice(omp_get_thread_num(), torch::indexing::None)});      
                 std::vector<float> ORow = formatTensor(ORowTensor);
-		//YOUR CODE HERE
+        //YOUR CODE HERE
+                #pragma omp parallel for collapse(2)
+                for (int k = 0; k < N; k++) {
+                    //loop over Embedding Dimensionality
+                    for (int j = 0; j < d; j++) {
+                        ORow[k] += fourDimRead(Q, b, h, i, j, H, N, d)*fourDimRead(K, b, h, k, j, H, N, d);
+                    }
+                }
+
+                //softmax
+                float sum = 0.0;
+                for (int j = 0; j < N; j++) {
+                    float val = exp(ORow[j]);
+                    ORow[j] = val;
+                    sum += val;
+                }
+                #pragma omp parallel for
+                for (int j = 0; j < N; j++) {
+                    float val = ORow[j] / sum;
+                    ORow[j] = val;
+                }
+
+                // O = PV
+                for (int j = 0; j < d; j++) {
+                    float val = 0.0;
+                    for (int k = 0; k < N; k++) {
+                        float val_v = fourDimRead(V, b, h, k, j, H, N, d);
+                        val += ORow[k]*val_v;
+                    }
+                    fourDimWrite(O, b, h, i, j, H, N, d, val);
+                }
             }
-	}
+        }
     }
-	    
-	
+        
+    
     // DO NOT EDIT THIS RETURN STATEMENT //
     // It formats your C++ Vector O back into a Tensor of Shape (B, H, N, d) and returns it //
     return torch::from_blob(O.data(), {B, H, N, d}, torch::TensorOptions().dtype(torch::kFloat32)).clone();
