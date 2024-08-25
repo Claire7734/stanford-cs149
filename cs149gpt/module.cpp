@@ -295,6 +295,7 @@ torch::Tensor myFusedAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
     // -------- YOUR CODE HERE  -------- //
     // We give you a template of the first three loops for your convenience
     //loop over batch
+    #pragma omp parallel for collapse(3)
     for (int b = 0; b < B; b++){
 
         //loop over heads
@@ -305,33 +306,31 @@ torch::Tensor myFusedAttention(torch::Tensor QTensor, torch::Tensor KTensor, tor
                 at::Tensor ORowTensor = temp.index({torch::indexing::Slice(omp_get_thread_num(), torch::indexing::None)});      
                 std::vector<float> ORow = formatTensor(ORowTensor);
         //YOUR CODE HERE
-                #pragma omp parallel for collapse(2)
+                // QK
+                float sum = 0.0;
                 for (int k = 0; k < N; k++) {
                     //loop over Embedding Dimensionality
+                    float val = 0;
                     for (int j = 0; j < d; j++) {
-                        ORow[k] += fourDimRead(Q, b, h, i, j, H, N, d)*fourDimRead(K, b, h, k, j, H, N, d);
+                        float val_q = fourDimRead(Q, b, h, i, j, H, N, d);
+                        float val_k = fourDimRead(K, b, h, k, j, H, N, d);
+                        val += val_q*val_k;
                     }
+                    val = exp(val);
+                    ORow[k] = val;
+                    sum += val;
                 }
 
                 //softmax
-                float sum = 0.0;
                 for (int j = 0; j < N; j++) {
-                    float val = exp(ORow[j]);
-                    ORow[j] = val;
-                    sum += val;
-                }
-                #pragma omp parallel for
-                for (int j = 0; j < N; j++) {
-                    float val = ORow[j] / sum;
-                    ORow[j] = val;
+                    ORow[j] = ORow[j] / sum;
                 }
 
                 // O = PV
                 for (int j = 0; j < d; j++) {
-                    float val = 0.0;
+                    float val = fourDimRead(O, b, h, i, j, H, N, d);
                     for (int k = 0; k < N; k++) {
-                        float val_v = fourDimRead(V, b, h, k, j, H, N, d);
-                        val += ORow[k]*val_v;
+                        val += ORow[k]*fourDimRead(V, b, h, k, j, H, N, d);
                     }
                     fourDimWrite(O, b, h, i, j, H, N, d, val);
                 }
